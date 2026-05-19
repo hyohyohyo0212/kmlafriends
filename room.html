@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>매칭룸</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a class="brand" href="index.html"><div class="logo-slot">로고 영역</div></a>
+  <div class="nav-links">
+    <a href="participant.html">참가자 화면</a>
+    <a href="admin.html">운영진 화면</a>
+    <a class="active" href="room.html">매칭룸</a>
+    <a href="index.html">소개</a>
+  </div>
+</nav>
+
+<main>
+  <section class="split">
+    <div class="panel">
+      <p class="eyebrow">PAIR ROOM</p>
+      <h1 style="font-size:64px">오늘의 질문과<br>답변</h1>
+      <p class="desc">익명 로그인 상태를 확인한 뒤 내 고정 페어와 오늘의 질문을 불러옵니다.</p>
+
+      <div class="buttons">
+        <button id="loginBtn">익명으로 로그인</button>
+        <button class="ghost" id="logoutBtn">로그아웃</button>
+      </div>
+
+      <div class="userbar" id="userbar">로그인 상태 확인 중입니다.</div>
+      <p class="small" id="roomStatus"></p>
+    </div>
+
+    <div class="panel form">
+      <h2>오늘의 질문</h2>
+      <div id="questionBox" class="question">오늘의 질문을 불러오는 중입니다.</div>
+
+      <label>나의 답변</label>
+      <textarea id="myAnswer" rows="6" placeholder="오늘의 질문에 답변해주세요."></textarea>
+
+      <button id="saveAnswerBtn" style="width:100%;margin-top:18px">내 답변 저장</button>
+      <p class="small" id="answerStatus"></p>
+    </div>
+  </section>
+
+  <section id="answersSection" class="panel" style="margin-top:22px">
+    <p class="eyebrow">ANSWERS</p>
+    <h2>나의 답변과 상대방의 답변</h2>
+    <div class="room-grid" style="margin-top:22px">
+      <div class="item">
+        <b>나의 답변</b>
+        <p id="myAnswerView">아직 답변이 없습니다.</p>
+      </div>
+      <div class="item">
+        <b>상대방의 답변</b>
+        <p id="partnerAnswerView">상대가 아직 답변하지 않았거나 매칭이 없습니다.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>Pair Room</footer>
+
+<script type="module" src="firebase.js"></script>
+<script type="module">
+let currentUser = null;
+let currentPair = null;
+let todayQuestion = null;
+let partnerUid = null;
+
+function setLoggedInUI(user) {
+  if (user) {
+    userbar.innerHTML = `<span class="badge">로그인됨</span> 익명 사용자`;
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-block';
+  } else {
+    userbar.textContent = '로그인 전입니다.';
+    loginBtn.style.display = 'inline-block';
+    logoutBtn.style.display = 'inline-block';
+  }
+}
+
+window.fb.onAuthStateChanged(window.auth, async (user) => {
+  currentUser = user;
+  setLoggedInUI(user);
+
+  if (user) {
+    await initializeRoom();
+  } else {
+    roomStatus.textContent = '참가자 화면에서 익명 로그인하면 이곳에서도 같은 로그인 상태가 유지됩니다.';
+    questionBox.textContent = '로그인 후 오늘의 질문을 확인할 수 있습니다.';
+  }
+});
+
+loginBtn.onclick = async () => {
+  try {
+    await window.fb.loginAnonymously();
+  } catch (e) {
+    alert('로그인 실패: ' + e.message);
+  }
+};
+
+logoutBtn.onclick = async () => {
+  try {
+    await window.fb.logout();
+    location.reload();
+  } catch (e) {
+    alert('로그아웃 실패: ' + e.message);
+  }
+};
+
+async function initializeRoom() {
+  roomStatus.textContent = '매칭과 오늘의 질문을 불러오는 중입니다...';
+  await loadTodayQuestion();
+  await loadMyPair();
+
+  if (currentPair && todayQuestion) {
+    await loadAnswers();
+  }
+}
+
+async function loadTodayQuestion() {
+  const snap = await window.fb.getDoc(
+    window.fb.doc(window.db, 'settings', 'todayQuestion')
+  );
+
+  if (!snap.exists()) {
+    questionBox.textContent = '아직 운영진이 오늘의 질문을 업로드하지 않았습니다.';
+    todayQuestion = null;
+    return;
+  }
+
+  todayQuestion = snap.data();
+  questionBox.textContent = todayQuestion.text || '질문 내용이 비어 있습니다.';
+}
+
+async function loadMyPair() {
+  const snapshot = await window.fb.getDocs(
+    window.fb.collection(window.db, 'pairs')
+  );
+
+  const pairs = snapshot.docs.map(d => d.data());
+  currentPair = pairs.find(p =>
+    Array.isArray(p.userIds) && p.userIds.includes(currentUser.uid)
+  );
+
+  if (!currentPair) {
+    roomStatus.textContent = '아직 운영진이 매칭을 생성하지 않았습니다.';
+    return;
+  }
+
+  partnerUid = currentPair.userA === currentUser.uid
+    ? currentPair.userB
+    : currentPair.userA;
+
+  roomStatus.innerHTML = `내 Pair Code: <span class="code">${currentPair.code}</span>`;
+}
+
+saveAnswerBtn.onclick = async () => {
+  if (!currentUser) return alert('먼저 익명으로 로그인해주세요.');
+  if (!currentPair) return alert('아직 매칭이 생성되지 않았습니다.');
+  if (!todayQuestion) return alert('아직 오늘의 질문이 없습니다.');
+
+  const text = myAnswer.value.trim();
+  if (!text) return alert('답변을 입력해주세요.');
+
+  const answerId = `${todayQuestion.questionId}_${currentPair.code}_${currentUser.uid}`;
+
+  await window.fb.setDoc(
+    window.fb.doc(window.db, 'answers', answerId),
+    {
+      answerId,
+      questionId: todayQuestion.questionId,
+      pairCode: currentPair.code,
+      uid: currentUser.uid,
+      text,
+      updatedAt: window.fb.serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  answerStatus.textContent = '답변이 저장되었습니다.';
+  await loadAnswers();
+};
+
+async function loadAnswers() {
+  const myId = `${todayQuestion.questionId}_${currentPair.code}_${currentUser.uid}`;
+  const partnerId = `${todayQuestion.questionId}_${currentPair.code}_${partnerUid}`;
+
+  const mySnap = await window.fb.getDoc(window.fb.doc(window.db, 'answers', myId));
+  const partnerSnap = await window.fb.getDoc(window.fb.doc(window.db, 'answers', partnerId));
+
+  if (mySnap.exists()) {
+    const d = mySnap.data();
+    myAnswer.value = d.text || '';
+    myAnswerView.textContent = d.text || '아직 답변이 없습니다.';
+  } else {
+    myAnswerView.textContent = '아직 답변이 없습니다.';
+  }
+
+  partnerAnswerView.textContent = partnerSnap.exists()
+    ? (partnerSnap.data().text || '상대가 아직 답변하지 않았습니다.')
+    : '상대가 아직 답변하지 않았습니다.';
+}
+</script>
+</body>
+</html>

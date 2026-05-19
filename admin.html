@@ -21,7 +21,7 @@
   <section id="login" class="panel" style="max-width:560px;margin:50px auto">
     <p class="eyebrow">ADMIN ONLY</p>
     <h2>운영진 비밀번호</h2>
-    <p>시연용 비밀번호는 <b>1234</b> 입니다.</p>
+    <p>시연용 비밀번호는 <b>비밀~</b> 입니다.</p>
     <input id="pw" type="password" placeholder="비밀번호 입력">
     <button style="margin-top:16px" id="loginBtn">입장</button>
     <p class="small" id="adminLoginStatus"></p>
@@ -82,7 +82,7 @@
 let users = [];
 
 loginBtn.onclick = async () => {
-  if (pw.value !== '1234') {
+  if (pw.value !== 'minder1234') {
     return alert('비밀번호가 틀렸습니다.');
   }
 

@@ -9,9 +9,41 @@
 let currentUser=null,currentPair=null,pairQuestion=null,partnerUid=null,partnerNickname='상대방';function setLoggedInUI(user){if(user){userbar.innerHTML='<span class="badge">로그인됨</span> 익명 사용자';loginBtn.style.display='none'}else{userbar.textContent='로그인 전입니다.';loginBtn.style.display='inline-block'}}
 window.fb.onAuthStateChanged(window.auth,async(user)=>{currentUser=user;setLoggedInUI(user);if(user){await initializeRoom()}else{roomStatus.textContent='참가자 화면에서 익명 로그인하면 이곳에서도 같은 로그인 상태가 유지됩니다.';questionBox.textContent='로그인 후 질문을 확인할 수 있습니다.'}});
 loginBtn.onclick=async()=>{try{await window.fb.loginAnonymously()}catch(e){alert('로그인 실패: '+e.message)}};logoutBtn.onclick=async()=>{try{await window.fb.logout();location.reload()}catch(e){alert('로그아웃 실패: '+e.message)}};
-async function initializeRoom(){roomStatus.textContent='내 매칭을 불러오는 중입니다...';await loadMyPair();if(currentPair&&pairQuestion){await loadAnswers()}}
-async function loadMyPair(){const snapshot=await window.fb.getDocs(window.fb.collection(window.db,'pairs'));const pairs=snapshot.docs.map(d=>d.data());currentPair=pairs.find(p=>Array.isArray(p.userIds)&&p.userIds.includes(currentUser.uid));if(!currentPair){partnerBox.textContent='아직 매칭된 상대가 없습니다.';questionBox.textContent='운영진이 매칭과 질문을 생성하면 이곳에 표시됩니다.';roomStatus.textContent='아직 운영진이 매칭을 생성하지 않았습니다.';return}partnerUid=currentPair.userA===currentUser.uid?currentPair.userB:currentPair.userA;const partner=currentPair.a?.uid===partnerUid?currentPair.a:currentPair.b;partnerNickname=partner?.nickname||'상대방';pairQuestion=currentPair.question||null;partnerBox.innerHTML=`나의 매칭 상대: <span class="badge">${partnerNickname}</span>`;partnerAnswerTitle.textContent=`${partnerNickname}의 답변`;questionBox.textContent=pairQuestion?.text||'이 커플에게 등록된 질문이 없습니다.';roomStatus.innerHTML=`내 Pair Code: <span class="code">${currentPair.code}</span>`}
-saveAnswerBtn.onclick=async()=>{if(!currentUser)return alert('먼저 익명으로 로그인해주세요.');if(!currentPair)return alert('아직 매칭이 생성되지 않았습니다.');if(!pairQuestion)return alert('아직 이 커플의 질문이 없습니다.');const text=myAnswer.value.trim();if(!text)return alert('답변을 입력해주세요.');const answerId=`${pairQuestion.questionId}_${currentPair.code}_${currentUser.uid}`;await window.fb.setDoc(window.fb.doc(window.db,'answers',answerId),{answerId,questionId:pairQuestion.questionId,questionText:pairQuestion.text,pairCode:currentPair.code,uid:currentUser.uid,text,updatedAt:window.fb.serverTimestamp()},{merge:true});answerStatus.textContent='답변이 저장되었습니다.';await loadAnswers()};
+async function initializeRoom(){roomStatus.textContent='내 매칭을 불러오는 중입니다...';await loadMyPair();await loadTodayQuestion;if(currentPair&&pairQuestion){await loadAnswers()}}
+async function loadMyPair(){const snapshot=await window.fb.getDocs(window.fb.collection(window.db,'pairs'));const pairs=snapshot.docs.map(d=>d.data());currentPair=pairs.find(p=>Array.isArray(p.userIds)&&p.userIds.includes(currentUser.uid));if(!currentPair){partnerBox.textContent='아직 매칭된 상대가 없습니다.';questionBox.textContent='운영진이 매칭과 질문을 생성하면 이곳에 표시됩니다.';roomStatus.textContent='아직 운영진이 매칭을 생성하지 않았습니다.';return}partnerUid=currentPair.userA===currentUser.uid?currentPair.userB:currentPair.userA;const partner=currentPair.a?.uid===partnerUid?currentPair.a:currentPair.b;partnerNickname=partner?.nickname||'상대방';partnerBox.innerHTML=`나의 매칭 상대: <span class="badge">${partnerNickname}</span>`;partnerAnswerTitle.textContent=`${partnerNickname}의 답변`;questionBox.textContent=pairQuestion?.text||'이 커플에게 등록된 질문이 없습니다.';roomStatus.innerHTML=`내 Pair Code: <span class="code">${currentPair.code}</span>`}
+async function loadTodayQuestion() {
+
+  const snap = await window.fb.getDoc(
+
+    window.fb.doc(window.db, 'settings', 'todayQuestion')
+
+  );
+
+  if (!snap.exists()) {
+
+    questionBox.textContent = '아직 운영진이 오늘의 질문을 올리지 않았습니다.';
+
+    pairQuestion = null;
+
+    return;
+
+  }
+
+  const d = snap.data();
+
+  pairQuestion = {
+
+    questionId: d.questionId,
+
+    text: d.text
+
+  };
+
+  questionBox.textContent = d.text;
+
+}
+
+  saveAnswerBtn.onclick=async()=>{if(!currentUser)return alert('먼저 익명으로 로그인해주세요.');if(!currentPair)return alert('아직 매칭이 생성되지 않았습니다.');if(!pairQuestion)return alert('아직 이 커플의 질문이 없습니다.');const text=myAnswer.value.trim();if(!text)return alert('답변을 입력해주세요.');const answerId=`${pairQuestion.questionId}_${currentPair.code}_${currentUser.uid}`;await window.fb.setDoc(window.fb.doc(window.db,'answers',answerId),{answerId,questionId:pairQuestion.questionId,questionText:pairQuestion.text,pairCode:currentPair.code,uid:currentUser.uid,text,updatedAt:window.fb.serverTimestamp()},{merge:true});answerStatus.textContent='답변이 저장되었습니다.';await loadAnswers()};
 async function loadAnswers() {
   const snapshot = await window.fb.getDocs(
     window.fb.collection(window.db, 'answers')
